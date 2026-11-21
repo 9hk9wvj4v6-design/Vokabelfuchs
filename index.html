@@ -32,6 +32,19 @@ input,select,textarea{width:100%;font:inherit;padding:13px;border-radius:14px;bo
 .acc button{padding:9px 12px;margin:3px 2px;font-size:19px}
 .flash{min-height:190px;text-align:center;display:flex;flex-direction:column;justify-content:center;cursor:pointer}
 .mic{width:96px;height:96px;border-radius:50%;font-size:38px;display:block;margin:14px auto;padding:0;text-align:center}
+.big,.tile{box-shadow:0 4px 0 rgba(0,0,0,.2);transition:transform .08s,box-shadow .08s}
+.big:active,.tile:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.2)}
+.hero{display:flex;align-items:center;gap:14px;padding:20px 18px;border-radius:28px;color:#fff;background:linear-gradient(135deg,#3b4fd8,#6d4cf5);margin:4px 0 14px}
+.hero svg{width:88px;height:88px;flex:none;filter:drop-shadow(0 4px 0 rgba(0,0,0,.2))}
+.hero h1{font-size:34px;margin:0;font-weight:900}.hero p{margin:4px 0 0;font-size:16px;opacity:.95}
+.rings,.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.rings .card{margin:0;text-align:center;padding:14px 8px}
+.rg{position:relative;width:92px;height:92px;margin:0 auto 6px}.rg svg{width:92px;height:92px}
+.rg b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:26px}
+.tile{display:flex;flex-direction:column;justify-content:space-between;min-height:118px;margin:0;padding:14px;color:#fff;font-size:19px;text-align:left;border-radius:22px}
+.tile span{font-size:40px;line-height:1}
+@keyframes pop{from{transform:scale(.94);opacity:.3}}
+@media(prefers-reduced-motion:no-preference){.fb{animation:pop .25s ease-out}}
 </style></head><body><div id="app"></div>
 <script>
 const $=s=>document.querySelector(s),A=$('#app'),KEY='vokabelfuchs1',IV=[0,1,2,4,8,16];
@@ -66,12 +79,13 @@ r.onend=()=>{if(S.ls){S.ls=0;R()}};
 try{r.start()}catch(x){S.ls=0;S.ty=1;R()}}
 function R(){A.innerHTML=({home,setup,run,list,form,imp,ph:photo,bk:backup})[V]()}
 
-function home(){const t=D.w.length,m=D.w.filter(w=>w.box>=4).length,d=D.day===new Date().toDateString()?D.n:0,p=x=>Math.min(100,x*100);
-return `<h1>🦊 Vokabelfuchs</h1><p class="mu">Französisch lernen für Klasse 5 bis 7</p>
-<div class="card">🎯 Tagesziel: <b>${Math.min(d,D.goal)} von ${D.goal}</b><div class="bar"><i style="width:${p(d/D.goal)}%"></i></div></div>
-<div class="card">⭐ Sicher gelernt: <b>${m} von ${t}</b><div class="bar"><i style="width:${t?p(m/t):0}%"></i></div></div>
-${t?'':'<p class="fb mid">Lege zuerst Vokabeln an: Tippe unten auf „Vokabeln verwalten“.</p>'}
-${[['test','✍️ Vokabeltest'],['voice','🎤 Sprechen'],['cards','🃏 Karteikarten'],['exam','🏆 Prüfung']].map(([k,l])=>`<button class="big" data-a="setup" data-i="${k}">${l}</button>`).join('')}
+function home(){const t=D.w.length,m=D.w.filter(w=>w.box>=4).length,d=D.day===new Date().toDateString()?D.n:0,g=D.goal,
+rg=(p,n,c)=>`<div class="rg"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--ln)" stroke-width="4"/>${p>0?`<circle cx="18" cy="18" r="15.9" fill="none" stroke="${c}" stroke-width="4" stroke-linecap="round" pathLength="100" stroke-dasharray="${Math.min(100,p)} 100" transform="rotate(-90 18 18)"/>`:''}</svg><b>${n}</b></div>`,
+sub=!t?'Lege deine ersten Vokabeln an.':d>=g?'Tagesziel geschafft! 🎉':`Noch ${g-d} Vokabeln bis zum Tagesziel.`;
+return `<div class="hero"><svg viewBox="0 0 512 512"><polygon points="100,90 205,175 307,175 412,90 450,290 256,440 62,290" fill="#ff8a3d"/><polygon points="150,330 362,330 256,440" fill="#fff"/><circle cx="190" cy="282" r="20" fill="#1b2433"/><circle cx="322" cy="282" r="20" fill="#1b2433"/><circle cx="256" cy="414" r="22" fill="#1b2433"/></svg><div><h1>Salut!</h1><p>${sub}</p></div></div>
+<div class="rings"><div class="card">${rg(d/g*100,Math.min(d,g),'#ff8a3d')}<b>Tagesziel</b><div class="mu">von ${g} Vokabeln</div></div>
+<div class="card">${rg(t?m/t*100:0,m,'#22a55a')}<b>Sicher gelernt</b><div class="mu">von ${t} Vokabeln</div></div></div>
+<div class="grid">${[['test','✍️','Vokabeltest','#3b4fd8'],['voice','🎤','Sprechen','#d63a56'],['cards','🃏','Karteikarten','#0b8f7d'],['exam','🏆','Prüfung','#c76a00']].map(([k,e,l,c])=>`<button class="tile" style="background:${c}" data-a="setup" data-i="${k}"><span>${e}</span>${l}</button>`).join('')}</div>
 <button class="big pr" data-a="list">📚 Vokabeln verwalten</button><button class="big" data-a="bk">💾 Sichern &amp; Einstellungen</button>`}
 
 function setup(){const ex=S.mode==='exam';
