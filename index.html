@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vokabelfuchs">
+<meta name="theme-color" content="#3b4fd8"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon.png"><title>Vokabelfuchs</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<style>
+:root{--bg:#f3f6fc;--card:#fff;--tx:#1b2433;--mu:#617189;--pr:#3b4fd8;--prt:#fff;--pr2:#e4e9ff;--ok:#15803d;--okb:#d9f7e4;--no:#b91c1c;--nob:#fde4e4;--mb:#fff0c9;--mt:#8a4b08;--ln:#dde4f0;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1424;--card:#1a2338;--tx:#eef2fb;--mu:#9aa9c2;--pr:#8c9bff;--prt:#0e1424;--pr2:#2a3563;--ok:#86efac;--okb:#12422a;--no:#fca5a5;--nob:#5c1b1b;--mb:#5a3a0a;--mt:#fde68a;--ln:#2b3652}}
+:root[data-theme="dark"]{--bg:#0e1424;--card:#1a2338;--tx:#eef2fb;--mu:#9aa9c2;--pr:#8c9bff;--prt:#0e1424;--pr2:#2a3563;--ok:#86efac;--okb:#12422a;--no:#fca5a5;--nob:#5c1b1b;--mb:#5a3a0a;--mt:#fde68a;--ln:#2b3652}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:18px/1.4 ui-rounded,"SF Pro Rounded",-apple-system,system-ui,"Segoe UI",sans-serif}
+#app{max-width:560px;margin:0 auto;padding:16px 16px 48px}
+h1{font-size:30px;margin:6px 0 0}h2{font-size:22px;margin:10px 0}
+.mu{color:var(--mu);font-size:15px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:22px;padding:16px;margin:12px 0}
+button{font:inherit;font-weight:700;border:0;border-radius:16px;padding:13px 16px;background:var(--pr2);color:var(--pr);cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--pr);outline-offset:2px}
+.big{display:block;width:100%;margin:10px 0;text-align:left;font-size:19px;padding:18px}
+.pr{background:var(--pr);color:var(--prt);text-align:center}
+.sp{padding:8px 12px;font-size:14px;margin-left:6px}
+input,select,textarea{width:100%;font:inherit;padding:13px;border-radius:14px;border:2px solid var(--ln);background:var(--card);color:var(--tx);margin:6px 0}
+.bar{flex:1;height:12px;background:var(--ln);border-radius:9px;overflow:hidden;margin-top:8px}
+.top .bar{margin:0}.bar i{display:block;height:100%;background:var(--pr);border-radius:9px}
+.top{display:flex;align-items:center;gap:12px}
+.de{font-size:30px;font-weight:800;margin:12px 0}
+.fb{border-radius:16px;padding:12px 14px;margin:10px 0;font-weight:700}
+.ok{background:var(--okb);color:var(--ok)}.no{background:var(--nob);color:var(--no)}.mid{background:var(--mb);color:var(--mt)}
+.row{display:flex;align-items:center;gap:4px;padding:10px 0;border-bottom:1px solid var(--ln)}.row>div{flex:1}
+.acc button{padding:9px 12px;margin:3px 2px;font-size:19px}
+.flash{min-height:190px;text-align:center;display:flex;flex-direction:column;justify-content:center;cursor:pointer}
+.mic{width:96px;height:96px;border-radius:50%;font-size:38px;display:block;margin:14px auto;padding:0;text-align:center}
+</style></head><body><div id="app"></div>
+<script>
+const $=s=>document.querySelector(s),A=$('#app'),KEY='vokabelfuchs1',IV=[0,1,2,4,8,16];
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let D={w:[],goal:10,day:'',n:0,last:{}},V='home',S={};
+try{const r=localStorage.getItem(KEY);if(r)D={...D,...JSON.parse(r)}}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){}};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const nm=s=>s.toLowerCase().replace(/['`´]/g,'’').replace(/\s+/g,' ').trim();
+const na=s=>nm(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const st=s=>na(s).replace(/^(le |la |les |l’|un |une )/,'');
+const full=w=>w.art?w.art+(w.art.endsWith('’')?'':' ')+w.fr:w.fr;
+const acc=w=>[full(w),...(w.alt||[])].map(nm);
+const by=id=>D.w.find(w=>w.id===id),cur=()=>by(S.q[S.i]);
+const units=()=>[...new Set(D.w.map(w=>w.unit).filter(Boolean))].sort();
+const opt=(a,v,all)=>(all?`<option value="">${all}</option>`:'')+a.map(x=>`<option${x===v?' selected':''}>${esc(x)}</option>`).join('');
+const msg=()=>S.msg?`<p class="fb ${S.mc||'ok'}">${S.msg}</p>`:'';
+function say(t,l){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang=l;u.rate=.85;speechSynthesis.speak(u)}catch(e){}}
+function rec(w,ok){w.seen=(w.seen||0)+1;if(ok)w.box=Math.min(5,(w.box||0)+1);else{w.box=0;w.wr=(w.wr||0)+1}
+w.due=Date.now()+IV[w.box]*864e5;const t=new Date().toDateString();if(D.day!==t){D.day=t;D.n=0}D.n++;save()}
+function miss(w){if(!S.bad.includes(w.id))S.bad.push(w.id);if(S.mode!=='exam'&&!S.rq[w.id]){S.rq[w.id]=1;S.q.push(w.id)}}
+function fin(r,a,h){const w=cur();S.fb={r,a,h};if(r<2){rec(w,0);miss(w)}else rec(w,1);R()}
+function chk(a){const w=cur(),x=nm(a),L=acc(w);if(!x)return;
+if(L.includes(x))return fin(2,a);
+if(L.some(l=>na(l)===na(x)))return fin(1,a,'Achte auf die Akzente!');
+if(L.some(l=>st(l)===st(x)))return fin(1,a,w.art?'Vergiss den Artikel nicht!':'');
+fin(0,a)}
+function mic(){const w=cur(),r=new SR();r.lang='fr-FR';r.maxAlternatives=3;S.ls=1;S.msg='';R();
+r.onresult=e=>{const t=[...e.results[0]].map(x=>x.transcript),L=acc(w).map(st);S.ls=0;fin(t.some(x=>L.includes(st(x)))?2:0,t[0])};
+r.onerror=e=>{S.ls=0;S.ty=1;S.mc='no';S.msg='Das Mikrofon hat nicht geklappt ('+e.error+'). Erlaube den Zugriff oder tippe die Antwort.';R()};
+r.onend=()=>{if(S.ls){S.ls=0;R()}};
+try{r.start()}catch(x){S.ls=0;S.ty=1;R()}}
+function R(){A.innerHTML=({home,setup,run,list,form,imp,ph:photo,bk:backup})[V]()}
+
+function home(){const t=D.w.length,m=D.w.filter(w=>w.box>=4).length,d=D.day===new Date().toDateString()?D.n:0,p=x=>Math.min(100,x*100);
+return `<h1>🦊 Vokabelfuchs</h1><p class="mu">Französisch lernen für Klasse 5 bis 7</p>
+<div class="card">🎯 Tagesziel: <b>${Math.min(d,D.goal)} von ${D.goal}</b><div class="bar"><i style="width:${p(d/D.goal)}%"></i></div></div>
+<div class="card">⭐ Sicher gelernt: <b>${m} von ${t}</b><div class="bar"><i style="width:${t?p(m/t):0}%"></i></div></div>
+${t?'':'<p class="fb mid">Lege zuerst Vokabeln an: Tippe unten auf „Vokabeln verwalten“.</p>'}
+${[['test','✍️ Vokabeltest'],['voice','🎤 Sprechen'],['cards','🃏 Karteikarten'],['exam','🏆 Prüfung']].map(([k,l])=>`<button class="big" data-a="setup" data-i="${k}">${l}</button>`).join('')}
+<button class="big pr" data-a="list">📚 Vokabeln verwalten</button><button class="big" data-a="bk">💾 Sichern &amp; Einstellungen</button>`}
+
+function setup(){const ex=S.mode==='exam';
+return `<div class="top"><button data-a="home">‹ Zurück</button></div><h2>${{test:'Vokabeltest',voice:'Sprechen',cards:'Karteikarten',exam:'Prüfung mit 20 Vokabeln'}[S.mode]}</h2>
+<label class="mu">Unité / Lektion</label><select id="fu">${opt(units(),S.u||'','Alle Vokabeln')}</select>
+${ex?'':`<label class="mu">Welche Vokabeln?</label><select id="fc">${[['due','Fällige und neue (empfohlen)'],['wrong','Nur falsch beantwortete'],['new','Noch nicht gelernte'],['all','Alle der Auswahl']].map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>
+<label class="mu">Anzahl</label><select id="fn"><option value="10">10</option><option value="20">20</option><option value="0">Alle</option></select>`}
+${msg()}<button class="big pr" data-a="go">Los geht’s!</button>`}
+
+function run(){if(S.i>=S.q.length)return end();const w=cur(),m=S.mode,f=S.fb,
+top=`<div class="top"><button data-a="home">✕</button><div class="bar"><i style="width:${S.i/S.q.length*100}%"></i></div></div>`;
+if(m==='cards')return top+`<div class="card flash" data-a="flip"><div class="mu">${S.flip?'Französisch':'Deutsch'}</div><div class="de">${esc(S.flip?full(w):w.de)}</div>${S.flip&&w.alt?.length?`<div class="mu">auch: ${esc(w.alt.join(', '))}</div>`:''}</div>
+<button class="sp" data-a="${S.flip?'sfr':'sde'}">🔊 ${S.flip?'Französisch':'Deutsch'} anhören</button>`+
+(S.flip?`<button class="big pr" data-a="know" data-i="1">✓ Gewusst</button><button class="big" data-a="know" data-i="0">↻ Noch einmal üben</button>`:'<p class="mu">Tippe auf die Karte, um die Lösung zu sehen.</p>');
+let b=`${top}<div class="card"><div class="mu">Übersetze ins Französische</div><div class="de">${esc(w.de)} <button class="sp" data-a="sde">🔊 DE</button></div>`;
+if(f){b+=`<div class="fb ${['no','mid','ok'][f.r]}">${['✗ Leider falsch.','◐ Fast richtig, aber nicht ganz. '+(f.h||''),'✓ Richtig! Super!'][f.r]}</div>
+${m==='voice'?`<p>Verstanden: „${esc(f.a)}“</p>`:f.r<2?`<p class="mu">Deine Antwort: ${esc(f.a)}</p>`:''}
+<p>${f.r<2?'Richtig: ':''}<b>${esc(full(w))}</b><button class="sp" data-a="sfr">🔊 FR</button></p><button class="big pr" id="nx" data-a="nx">Weiter</button>`}
+else if(m==='voice'&&SR&&!S.ty)b+=`${msg()}<button class="mic pr" data-a="mic">${S.ls?'…':'🎤'}</button><p class="mu" style="text-align:center">${S.ls?'Ich höre zu …':'Tippe und sprich auf Französisch'}</p><p class="mu">Geprüft wird das erkannte Wort, nicht die Qualität deiner Aussprache.</p><button class="sp" data-a="ty">Lieber tippen</button>`;
+else b+=`${m==='voice'&&!SR?'<p class="fb mid">Spracherkennung gibt es hier nicht. Bitte tippe die Antwort.</p>':msg()}<input id="ans" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="Französisch eintippen"><div class="acc">${[...'éèêàâçùûôîïœ'].map(c=>`<button data-a="ch" data-i="${c}">${c}</button>`).join('')}</div><button class="big pr" data-a="chk">Prüfen</button>`;
+return b+'</div>'}
+
+function end(){const n=S.n0,k=n-S.bad.length,p=Math.round(k/n*100),g=[92,81,67,50,30].findIndex(x=>p>=x),gr=g<0?6:g+1;
+return `<h2>${p>=80?'🎉 Super gemacht!':'💪 Weiter so!'}</h2><div class="card"><div class="de">${k} von ${n} richtig</div>${S.mode==='exam'?`<p>Note: <b>${gr}</b> (${p} %)</p><p class="mu">Grenzen: 1 ab 92 %, 2 ab 81 %, 3 ab 67 %, 4 ab 50 %, 5 ab 30 %</p>`:''}</div>
+${S.bad.length?`<div class="card"><b>Das übst du noch:</b>${S.bad.map(id=>{const w=by(id);return w?`<div class="row"><div><b>${esc(full(w))}</b><br><span class="mu">${esc(w.de)}</span></div></div>`:''}).join('')}</div>`:''}
+<button class="big pr" data-a="home">Fertig</button>`}
+
+function list(){const u=S.lu||'',a=D.w.filter(w=>!u||w.unit===u);
+return `<div class="top"><button data-a="home">‹ Zurück</button></div><h2>Vokabeln (${D.w.length})</h2>
+<button class="big pr" data-a="add">＋ Neue Vokabel</button><button class="big" data-a="ph">📷 Foto einlesen</button><button class="big" data-a="imp">📋 Mehrere einfügen</button>
+<select data-a="lu">${opt(units(),u,'Alle Unités')}</select>
+${a.map(w=>`<div class="row"><div><b>${esc(full(w))}</b><br><span class="mu">${esc(w.de)}${w.unit?' · '+esc(w.unit):''}</span></div><button class="sp" data-a="sfr" data-i="${w.id}">🔊 FR</button><button class="sp" data-a="sde" data-i="${w.id}">🔊 DE</button><button class="sp" data-a="ed" data-i="${w.id}">✎</button></div>`).join('')||'<p class="mu">Noch keine Vokabeln.</p>'}`}
+
+function form(){const e=S.e||{},l=D.last||{};
+return `<div class="top"><button data-a="list">‹ Zurück</button></div><h2>${S.e?'Vokabel bearbeiten':'Neue Vokabel'}</h2>${msg()}
+<label class="mu">Französisch (ohne Artikel)</label><input id="fr" value="${esc(e.fr)}" autocapitalize="off">
+<label class="mu">Artikel (nur bei Substantiven)</label><select id="ar">${opt(['le','la','l’','les'],e.art,'– kein Artikel –')}</select>
+<label class="mu">Deutsch</label><input id="de" value="${esc(e.de)}">
+<label class="mu">Weitere richtige Antworten oder Formen (mit Komma trennen)</label><input id="al" value="${esc((e.alt||[]).join(', '))}">
+<label class="mu">Lehrbuch (z. B. Klasse 6, À plus)</label><input id="bk" value="${esc(S.e?e.book:l.book)}">
+<label class="mu">Unité / Lektion</label><input id="un" value="${esc(S.e?e.unit:l.unit)}">
+<button class="big pr" data-a="sv">Speichern</button>${S.e?`<button class="big no" data-a="del">${S.cd?'Wirklich löschen? Nochmal tippen':'🗑 Löschen'}</button>`:''}`}
+
+function imp(){const l=D.last||{};
+return `<div class="top"><button data-a="list">‹ Zurück</button></div><h2>Mehrere Vokabeln einfügen</h2><p class="mu">Eine Vokabel pro Zeile: <b>Französisch = Deutsch</b>, z. B. le chat = die Katze</p>
+<input id="bk" placeholder="Lehrbuch" value="${esc(l.book)}"><input id="un" placeholder="Unité / Lektion" value="${esc(l.unit)}">
+<textarea id="ta" rows="8" placeholder="la maison = das Haus&#10;bonjour = guten Tag"></textarea>${msg()}<button class="big pr" data-a="doimp">Importieren</button>`}
+
+function backup(){return `<div class="top"><button data-a="home">‹ Zurück</button></div><h2>Sichern &amp; Einstellungen</h2>
+<label class="mu">Tagesziel (Vokabeln pro Tag)</label><select data-a="gl">${[10,20].map(n=>`<option${n===D.goal?' selected':''}>${n}</option>`).join('')}</select>
+<h2>Datensicherung</h2><p class="mu">Deine Vokabeln und Lernstände liegen nur in diesem Browser. Kopiere den Text regelmäßig und speichere ihn z. B. in Notizen.</p>
+<textarea id="ex" rows="4" readonly>${esc(JSON.stringify(D))}</textarea><button class="big" data-a="cp">📋 Sicherung kopieren</button>
+<textarea id="im" rows="4" placeholder="Gesicherten Text hier einfügen"></textarea>${msg()}<button class="big" data-a="rs">⬆️ Wiederherstellen</button>`}
+
+const dom=()=>S.rows.map((x,i)=>({fr:$('#f'+i).value.trim(),de:$('#d'+i).value.trim(),c:$('#c'+i).checked}));
+function photo(){const l=D.last||{},r=S.rows;
+return `<div class="top"><button data-a="list">‹ Zurück</button></div><h2>Foto einlesen</h2>${msg()}
+${r?`<p class="mu">Prüfe jede Zeile. Unsichere Zeilen sind nicht angehakt. Gespeichert wird nur, was du anhakst.</p>
+<input id="bk" placeholder="Lehrbuch" value="${esc(l.book)}"><input id="un" placeholder="Unité / Lektion" value="${esc(l.unit)}">
+${r.map((x,i)=>`<div class="row" style="align-items:flex-start"><input type="checkbox" id="c${i}" ${x.c?'checked':''} style="width:28px;height:28px;flex:none;margin-top:14px"><div><input id="f${i}" value="${esc(x.fr)}" placeholder="Französisch"><input id="d${i}" value="${esc(x.de)}" placeholder="Deutsch"></div></div>`).join('')}
+<button class="big" data-a="swap">⇄ Spalten tauschen</button><button class="big pr" data-a="phsv">Angehakte speichern</button>`
+:`<p class="mu">Fotografiere die Vokabelliste: gut beleuchtet, gerade von oben, Französisch links und Deutsch rechts.</p><input id="fi" type="file" accept="image/*">`}`}
+function parseL(L){return L.filter(l=>l.text.trim()).map(l=>{const ws=l.words.filter(w=>w.text.trim()),h=l.bbox.y1-l.bbox.y0,t=l.text.trim(),m=t.split(/\s+[=–—-]\s+|\s*=\s*|\t/);let gi=0,g=0;
+for(let i=1;i<ws.length;i++){const d=ws[i].bbox.x0-ws[i-1].bbox.x1;if(d>g){g=d;gi=i}}
+if(gi>0&&g>h*1.2)return{fr:ws.slice(0,gi).map(w=>w.text).join(' '),de:ws.slice(gi).map(w=>w.text).join(' '),c:1};
+if(m.length===2)return{fr:m[0],de:m[1],c:1};return{fr:t,de:'',c:0}})}
+async function ocr(file){if(typeof Tesseract==='undefined'){S.msg='Für den Foto-Import brauchst du Internet.';S.mc='no';return R()}
+S.msg='Foto wird gelesen … Beim ersten Mal dauert es etwas länger.';S.mc='mid';R();
+try{const im=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=no;i.src=URL.createObjectURL(file)});
+const k=Math.min(1,2200/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+const wk=await Tesseract.createWorker(['fra','deu']),{data}=await wk.recognize(c);await wk.terminate();
+S.rows=parseL(data.lines);if(S.rows.length){S.msg=`${S.rows.length} Zeilen erkannt. Bitte prüfen.`;S.mc='mid'}else{S.rows=null;S.msg='Kein Text erkannt. Versuche ein schärferes Foto.';S.mc='no'}}
+catch(e){S.rows=null;S.msg='Das Foto konnte nicht gelesen werden. Ist das Internet an?';S.mc='no'}R()}
+function act(a,i){switch(a){
+case'home':V='home';break;
+case'setup':S={mode:i};V='setup';break;
+case'go':{const u=$('#fu').value,c=$('#fc')?.value||'all',now=Date.now();let n=+($('#fn')?.value??20)||0,q=D.w.filter(w=>!u||w.unit===u);S.u=u;if(S.mode==='exam')n=20;
+if(c==='due')q=q.filter(w=>!w.seen||w.due<=now);if(c==='wrong')q=q.filter(w=>w.wr&&w.box<4);if(c==='new')q=q.filter(w=>!w.seen);
+if(!q.length){S.msg='Keine passenden Vokabeln gefunden.';S.mc='no';return R()}
+q.sort(()=>Math.random()-.5);if(n)q=q.slice(0,n);S={...S,q:q.map(w=>w.id),n0:q.length,i:0,bad:[],rq:{},fb:null,flip:0,msg:'',ty:0,ls:0};V='run';break}
+case'chk':chk($('#ans').value);return;
+case'ch':{const n=$('#ans');n.value+=i;n.focus();return}
+case'sde':case'sfr':{const w=i?by(i):cur();if(w)say(a==='sfr'?full(w):w.de,a==='sfr'?'fr-FR':'de-DE');return}
+case'nx':S.i++;S.fb=null;S.msg='';break;
+case'flip':S.flip=1;break;
+case'know':{const w=cur();rec(w,+i);if(!+i)miss(w);S.i++;S.flip=0;break}
+case'mic':return mic();
+case'ty':S.ty=1;S.msg='';break;
+case'list':V='list';S.msg='';break;
+case'add':S.e=null;S.msg='';V='form';break;
+case'ed':S.e=by(i);S.cd=0;S.msg='';V='form';break;
+case'imp':S.msg='';V='imp';break;
+case'bk':S.msg='';V='bk';break;
+case'ph':S.rows=null;S.msg='';V='ph';break;
+case'swap':S.rows=dom().map(x=>({fr:x.de,de:x.fr,c:x.c}));break;
+case'phsv':{const o={book:$('#bk').value.trim(),unit:$('#un').value.trim()};D.last=o;let n=0;
+dom().forEach(x=>{if(!x.c||!x.fr||!x.de)return;let fr=x.fr,art='';const m=fr.match(/^(le |la |les |l[’'])\s*/i);
+if(m){art=m[1].trim().toLowerCase().replace("'",'’');fr=fr.slice(m[0].length)}
+D.w.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),fr,art,de:x.de,alt:[],...o,box:0,seen:0,wr:0,due:0});n++});
+save();S.rows=null;S.msg=`✓ ${n} Vokabeln gespeichert. Nächste Seite:`;S.mc='ok';break}
+case'sv':{const g=id=>$('#'+id).value.trim(),fr=g('fr'),de=g('de');
+if(!fr||!de){S.msg='Bitte Französisch und Deutsch ausfüllen.';S.mc='no';return R()}
+const o={fr,de,art:g('ar'),alt:g('al').split(',').map(s=>s.trim()).filter(Boolean),book:g('bk'),unit:g('un')};D.last={book:o.book,unit:o.unit};
+if(S.e){Object.assign(S.e,o);V='list';S.msg=''}else{D.w.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),...o,box:0,seen:0,wr:0,due:0});S.msg='✓ Gespeichert! Nächste Vokabel:';S.mc='ok'}
+save();break}
+case'del':if(!S.cd){S.cd=1;break}D.w=D.w.filter(w=>w!==S.e);S.cd=0;V='list';save();break;
+case'doimp':{let ok=0,bad=0;const o={book:$('#bk').value.trim(),unit:$('#un').value.trim()};D.last=o;
+$('#ta').value.split('\n').map(s=>s.trim()).filter(Boolean).forEach(l=>{const p=l.split(/\t|\s*=\s*|\s+[-–—]\s+|;/).map(s=>s.trim());
+if(p.length<2||!p[0]||!p[1]){bad++;return}let fr=p[0],art='';const m=fr.match(/^(le |la |les |l[’'])\s*/i);
+if(m){art=m[1].trim().toLowerCase().replace("'",'’');fr=fr.slice(m[0].length)}
+D.w.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),fr,art,de:p[1],alt:[],...o,box:0,seen:0,wr:0,due:0});ok++});
+save();S.msg=`✓ ${ok} importiert${bad?`, ${bad} Zeile(n) übersprungen (Format prüfen)`:''}.`;S.mc=bad?'mid':'ok';break}
+case'cp':{const t=$('#ex');t.select();try{navigator.clipboard.writeText(t.value)}catch(e){try{document.execCommand('copy')}catch(x){}}S.msg='Markiert und kopiert ✓';S.mc='ok';break}
+case'rs':{try{const j=JSON.parse($('#im').value);if(!Array.isArray(j.w))throw 0;D={...D,...j};save();S.msg=`✓ Wiederhergestellt (${D.w.length} Vokabeln).`;S.mc='ok'}catch(e){S.msg='Der Text ist keine gültige Sicherung.';S.mc='no'}break}
+}R()}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b&&b.tagName!=='SELECT')act(b.dataset.a,b.dataset.i)});
+document.addEventListener('change',e=>{const a=e.target.dataset&&e.target.dataset.a;if(a==='lu'){S.lu=e.target.value;R()}if(a==='gl'){D.goal=+e.target.value;save()}if(e.target.id==='fi'&&e.target.files[0])ocr(e.target.files[0]);});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'){const b=$('#nx')||($('#ans')&&$('[data-a="chk"]'));if(b)b.click()}});
+R();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
